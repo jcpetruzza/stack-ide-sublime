@@ -92,7 +92,7 @@ class StackIDEManager:
         updated_instances = {}
 
         # Kill stale instances, keep live ones
-        for win_id,instance in StackIDEManager.ide_backend_instances.items():
+        for win_id,instance in cls.ide_backend_instances.items():
             if win_id not in current_windows:
                 # This is a window that is now closed, we may need to kill its process
                 if instance.is_active:
@@ -110,23 +110,23 @@ class StackIDEManager:
                     del current_windows[win_id]
                     updated_instances[win_id] = instance
 
-        StackIDEManager.ide_backend_instances = updated_instances
+        cls.ide_backend_instances = updated_instances
         # Thw windows remaining in current_windows are new, so they have no instance.
         # We try to create one for them
         for window in current_windows.values():
-            StackIDEManager.ide_backend_instances[window.id()] = configure_instance(window, cls.settings)
+            cls.ide_backend_instances[window.id()] = configure_instance(window, cls.settings)
 
 
     @classmethod
     def is_running(cls, window):
         if not window:
             return False
-        return StackIDEManager.for_window(window) is not None
+        return cls.for_window(window) is not None
 
 
     @classmethod
     def for_window(cls, window):
-        instance = StackIDEManager.ide_backend_instances.get(window.id())
+        instance = cls.ide_backend_instances.get(window.id())
         if instance and not instance.is_active:
             instance = None
 
@@ -134,8 +134,8 @@ class StackIDEManager:
 
     @classmethod
     def kill_all(cls):
-        # Log.normal("Killing all stack-ide-sublime instances:", {k:str(v) for k, v in StackIDEManager.ide_backend_instances.items()})
-        for instance in StackIDEManager.ide_backend_instances.values():
+        # Log.normal("Killing all stack-ide-sublime instances:", {k:str(v) for k, v in cls.ide_backend_instances.items()})
+        for instance in cls.ide_backend_instances.values():
             instance.end()
 
     @classmethod
@@ -144,7 +144,7 @@ class StackIDEManager:
         Kill all instances, and forget about previous notifications.
         """
         Log.normal("Resetting StackIDE")
-        StackIDEManager.kill_all()
+        cls.kill_all()
         reset_complaints()
 
     @classmethod

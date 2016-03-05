@@ -18,37 +18,37 @@ class Log:
 
   @classmethod
   def reset(cls):
-      Log.verbosity = None
+      cls.verbosity = None
 
   @classmethod
   def error(cls,*msg):
-      Log._record(Log.VERB_ERROR, *msg)
+      cls._record(cls.VERB_ERROR, *msg)
 
   @classmethod
   def warning(cls,*msg):
-      Log._record(Log.VERB_WARNING, *msg)
+      cls._record(cls.VERB_WARNING, *msg)
 
   @classmethod
   def normal(cls,*msg):
-      Log._record(Log.VERB_NORMAL, *msg)
+      cls._record(cls.VERB_NORMAL, *msg)
 
   @classmethod
   def debug(cls,*msg):
-      Log._record(Log.VERB_DEBUG, *msg)
+      cls._record(cls.VERB_DEBUG, *msg)
 
   @classmethod
   def _record(cls, verb, *msg):
-      if not Log.verbosity:
-          Log._set_verbosity("none")
+      if not cls.verbosity:
+          cls._set_verbosity("none")
 
-      if verb <= Log.verbosity:
+      if verb <= cls.verbosity:
           for line in ''.join(map(lambda x: str(x), msg)).split('\n'):
               print('[SublimeStackIDE]['+cls._show_verbosity(verb)+']:',*msg)
 
-          if verb == Log.VERB_ERROR:
-              sublime.status_message('There were errors, check the console log')
-          elif verb == Log.VERB_WARNING:
-              sublime.status_message('There were warnings, check the console log')
+          if verb == cls.VERB_ERROR:
+              sublime.status_message('There were errors, check the console cls')
+          elif verb == cls.VERB_WARNING:
+              sublime.status_message('There were warnings, check the console cls')
 
   @classmethod
   def _set_verbosity(cls, input):
@@ -56,18 +56,18 @@ class Log:
       verb = input.lower()
 
       if verb == "none":
-          Log.verbosity = Log.VERB_NONE
+          cls.verbosity = cls.VERB_NONE
       elif verb == "error":
-          Log.verbosity = Log.VERB_ERROR
+          cls.verbosity = cls.VERB_ERROR
       elif verb == "warning":
-          Log.verbosity = Log.VERB_WARNING
+          cls.verbosity = cls.VERB_WARNING
       elif verb == "normal":
-          Log.verbosity = Log.VERB_NORMAL
+          cls.verbosity = cls.VERB_NORMAL
       elif verb == "debug":
-          Log.verbosity = Log.VERB_DEBUG
+          cls.verbosity = cls.VERB_DEBUG
       else:
-          Log.verbosity = Log.VERB_WARNING
-          Log.warning("Invalid verbosity: '" + str(verb) + "'")
+          cls.verbosity = cls.VERB_WARNING
+          cls.warning("Invalid verbosity: '" + str(verb) + "'")
 
   @classmethod
   def _show_verbosity(cls,verb):
