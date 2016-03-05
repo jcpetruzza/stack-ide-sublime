@@ -50,3 +50,6 @@ class FakeBackend():
             return
         else:
             raise Exception(tag)
+
+    def fake_loadtargets_response(self, project_path, package):
+        return ['app/Main.hs', 'src/Lib.hs']

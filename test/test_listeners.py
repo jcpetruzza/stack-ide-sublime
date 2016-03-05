@@ -22,9 +22,6 @@ request_include_targets = {'contents': [{'contents': {'contents': ['src/Main.hs'
 
 class ListenerTests(unittest.TestCase):
 
-    def setUp(self):
-        stack_ide.stack_ide_loadtargets = Mock(return_value=['app/Main.hs', 'src/Lib.hs'])
-
     def test_requests_update_on_save(self):
         listener = StackIDESaveListener()
 

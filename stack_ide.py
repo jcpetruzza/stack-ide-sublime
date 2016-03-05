@@ -42,9 +42,11 @@ class StackIDE:
 
         if backend is None:
             self._backend = stack_ide_start(self.project_path, self.project_name, self.handle_response)
+            self.stack_ide_loadtargets = stack_ide_loadtargets
         else: # for testing
             self._backend = backend
             self._backend.handler = self.handle_response
+            self.stack_ide_loadtargets = backend.fake_loadtargets_response
 
         self.is_active = True
         self.include_targets = set()
@@ -74,7 +76,7 @@ class StackIDE:
         """
         Get the initial list of files to check
         """
-        initial_targets = stack_ide_loadtargets(self.project_path, self.project_name)
+        initial_targets = self.stack_ide_loadtargets(self.project_path, self.project_name)
         sublime.set_timeout(lambda: self.update_files(initial_targets), 0)
 
 

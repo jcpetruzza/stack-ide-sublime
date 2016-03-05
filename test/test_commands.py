@@ -9,9 +9,6 @@ from .data import type_info, someFunc_span_info, putStrLn_span_info
 
 class CommandTests(unittest.TestCase):
 
-    def setUp(self):
-        stackide.stack_ide_loadtargets = Mock(return_value=['app/Main.hs', 'src/Lib.hs'])
-
     def test_can_clear_panel(self):
         cmd = ClearErrorPanelCommand()
         cmd.view = MagicMock()

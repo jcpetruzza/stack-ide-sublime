@@ -86,7 +86,6 @@ class StackIDEManagerTests(unittest.TestCase):
 
         # substitute a 'live' instance
         backend = MagicMock()
-        stack_ide.stack_ide_loadtargets = Mock(return_value=['app/Main.hs', 'src/Lib.hs'])
         instance = stack_ide.StackIDE(window, test_settings, backend)
         StackIDEManager.ide_backend_instances[window.id()] = instance
 
@@ -119,7 +118,6 @@ class StackIDEManagerTests(unittest.TestCase):
 
         # substitute a 'live' instance
         backend = MagicMock()
-        stack_ide.stack_ide_loadtargets = Mock(return_value=['app/Main.hs', 'src/Lib.hs'])
         instance = stack_ide.StackIDE(window, test_settings, backend)
         StackIDEManager.ide_backend_instances[window.id()] = instance
 
