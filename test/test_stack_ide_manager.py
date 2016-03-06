@@ -3,11 +3,10 @@ import os
 import unittest
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, Mock
-from stack_ide_manager import NoStackIDE, StackIDEManager, configure_instance
+from stack_ide_manager import NoStackIDE, StackIDEManager
 import stack_ide
-from .mocks import mock_window, cur_dir
 from .stubs import sublime
-from .fakebackend import FakeBackend
+from .fakebackend import patched_stack_ide_manager
 from .data import test_settings
 from log import Log
 from req import Req
@@ -29,8 +28,10 @@ class WatchdogTests(unittest.TestCase):
         self.assertIsNone(wd.watchdog)
 
 
+@patched_stack_ide_manager
 class StackIDEManagerTests(unittest.TestCase):
-
+    def setUp(self):
+        sublime.reset_stub()
 
     def test_defaults(self):
 
@@ -40,14 +41,14 @@ class StackIDEManagerTests(unittest.TestCase):
 
     def test_creates_initial_window(self):
 
-        sublime.create_window('.')
+        new_window_on_folder('.')
         StackIDEManager.check_windows()
         self.assertEqual(1, len(StackIDEManager.ide_backend_instances))
         sublime.destroy_windows()
 
     def test_monitors_closed_windows(self):
 
-        sublime.create_window('.')
+        new_window_on_folder('.')
         StackIDEManager.check_windows()
         self.assertEqual(1, len(StackIDEManager.ide_backend_instances))
         sublime.destroy_windows()
@@ -58,39 +59,33 @@ class StackIDEManagerTests(unittest.TestCase):
 
         StackIDEManager.check_windows()
         self.assertEqual(0, len(StackIDEManager.ide_backend_instances))
-        sublime.create_window('.')
+        new_window_on_folder('.')
         StackIDEManager.check_windows()
         self.assertEqual(1, len(StackIDEManager.ide_backend_instances))
         sublime.destroy_windows()
 
     def test_retains_live_instances(self):
 
-        window = mock_window(['.'])
-        sublime.add_window(window)
-
+        window = new_window_on_folder('.')
         StackIDEManager.check_windows()
         self.assertEqual(1, len(StackIDEManager.ide_backend_instances))
 
-        # substitute a 'live' instance
-        instance = stack_ide.StackIDE(window, test_settings, FakeBackend())
-        StackIDEManager.ide_backend_instances[window.id()] = instance
+        original_instance = StackIDEManager.for_window(window)
 
         # instance should still exist.
         StackIDEManager.check_windows()
         self.assertEqual(1, len(StackIDEManager.ide_backend_instances))
-        self.assertEqual(instance, StackIDEManager.ide_backend_instances[window.id()])
+        self.assertEqual(original_instance, StackIDEManager.for_window(window))
 
         sublime.destroy_windows()
 
     def test_kills_live_orphans(self):
-        window = sublime.create_window('.')
+
+        window = new_window_on_folder('.')
         StackIDEManager.check_windows()
         self.assertEqual(1, len(StackIDEManager.ide_backend_instances))
 
-        # substitute a 'live' instance
-        backend = MagicMock()
-        instance = stack_ide.StackIDE(window, test_settings, backend)
-        StackIDEManager.ide_backend_instances[window.id()] = instance
+        instance = StackIDEManager.for_window(window)
 
         # close the window
         sublime.destroy_windows()
@@ -99,13 +94,13 @@ class StackIDEManagerTests(unittest.TestCase):
         StackIDEManager.check_windows()
         self.assertEqual(0, len(StackIDEManager.ide_backend_instances))
         self.assertFalse(instance.is_alive)
-        backend.send_request.assert_called_with(Req.get_shutdown())
+        instance._backend.send_request.assert_called_with(Req.get_shutdown())
 
 
     def test_retains_existing_instances(self):
         StackIDEManager.check_windows()
         self.assertEqual(0, len(StackIDEManager.ide_backend_instances))
-        sublime.create_window('.')
+        new_window_on_folder('.')
         StackIDEManager.check_windows()
         self.assertEqual(1, len(StackIDEManager.ide_backend_instances))
         StackIDEManager.check_windows()
@@ -113,23 +108,19 @@ class StackIDEManagerTests(unittest.TestCase):
         sublime.destroy_windows()
 
     def test_reset(self):
-        window = mock_window(['.'])
-        sublime.add_window(window)
+        window = new_window_on_folder('.')
 
         StackIDEManager.check_windows()
         self.assertEqual(1, len(StackIDEManager.ide_backend_instances))
 
-        # substitute a 'live' instance
-        backend = MagicMock()
-        instance = stack_ide.StackIDE(window, test_settings, backend)
-        StackIDEManager.ide_backend_instances[window.id()] = instance
+        instance = StackIDEManager.for_window(window)
 
         StackIDEManager.reset()
 
         # instances should be shut down.
         self.assertEqual(1, len(StackIDEManager.ide_backend_instances))
         self.assertFalse(instance.is_alive)
-        backend.send_request.assert_called_with(Req.get_shutdown())
+        instance._backend.send_request.assert_called_with(Req.get_shutdown())
 
         sublime.destroy_windows()
 
@@ -142,18 +133,20 @@ class LaunchTests(unittest.TestCase):
     # Stack IDE instance (null object or live)
     # the null object should contain the reason why the launch failed.
     def setUp(self):
+        sublime.reset_stub()
         Log._set_verbosity("none")
 
 
     def test_launch_window_without_folder(self):
-        instance = configure_instance(mock_window([]), test_settings)
+        window = sublime.create_window([])
+        instance = StackIDEManager.configure_instance(window, test_settings)
         self.assertIsInstance(instance, NoStackIDE)
         self.assertRegex(instance.reason, "No folder to monitor.*")
 
     def test_launch_window_with_empty_folder(self):
         with fake_project(['empty_project/Main.hs']) as prj:
-            instance = configure_instance(
-                mock_window([prj('hempty_project')]), test_settings)
+            instance = StackIDEManager.configure_instance(
+                new_window_on_folder(prj('hempty_project')), test_settings)
             self.assertIsInstance(instance, NoStackIDE)
             self.assertRegex(instance.reason, "No cabal file found.*")
 
@@ -163,8 +156,8 @@ class LaunchTests(unittest.TestCase):
             'cabal_project/Main.hs',
         ]
         with fake_project(cabal_project) as prj:
-            instance = configure_instance(
-                mock_window([prj('cabal_project')]), test_settings)
+            instance = StackIDEManager.configure_instance(
+                new_window_on_folder(prj('cabal_project')), test_settings)
             self.assertIsInstance(instance, NoStackIDE)
             self.assertRegex(instance.reason, "No stack.yaml in path.*")
 
@@ -175,27 +168,22 @@ class LaunchTests(unittest.TestCase):
             'cabal_project/Main.hs',
         ]
         with fake_project(cabalfile_wrong_project) as prj:
-            instance = configure_instance(
-                mock_window([prj('cabal_project')]), test_settings)
+            instance = StackIDEManager.configure_instance(
+                new_window_on_folder(prj('cabal_project')), test_settings)
             self.assertIsInstance(instance, NoStackIDE)
             self.assertRegex(instance.reason, "cabal_project.cabal not found.*")
-
-    @unittest.skip("Actually starts a stack ide, slow and won't work on Travis")
-    def test_launch_window_with_helloworld_project(self):
-        instance = configure_instance(
-            mock_window([cur_dir + '/projects/helloworld']), test_settings)
-        self.assertIsInstance(instance, stack_ide.StackIDE)
-        instance.end()
 
     ok_project = [
         'ok_project/ok_project.cabal',
         'ok_project/stack.yaml',
         'ok_project/src/Main.hs',
     ]
+
     def test_launch_window_stack_not_found(self):
         stack_ide.stack_ide_start = Mock(side_effect=FileNotFoundError())
         with fake_project(self.ok_project) as prj:
-            instance = configure_instance(mock_window([prj('ok_project')]), test_settings)
+            instance = StackIDEManager.configure_instance(
+                new_window_on_folder(prj('ok_project')), test_settings)
             self.assertIsInstance(instance, NoStackIDE)
             self.assertRegex(instance.reason, "instance init failed -- stack not found")
             self.assertRegex(sublime.current_error, "Could not find program 'stack'!")
@@ -203,11 +191,16 @@ class LaunchTests(unittest.TestCase):
     def test_launch_window_stack_unknown_error(self):
         stack_ide.stack_ide_start = Mock(side_effect=Exception())
         with fake_project(self.ok_project) as prj:
-            instance = configure_instance(mock_window([prj('ok_project')]), test_settings)
+            instance = StackIDEManager.configure_instance(
+                new_window_on_folder(prj('ok_project')), test_settings)
             self.assertIsInstance(instance, NoStackIDE)
             self.assertRegex(instance.reason, "instance init failed -- unknown error")
 
 
+def new_window_on_folder(folder_name):
+    window = sublime.create_window([folder_name])
+    window.open_file(folder_name + '/some_file.hs')
+    return window
 
 @contextlib.contextmanager
 def fake_project(files):

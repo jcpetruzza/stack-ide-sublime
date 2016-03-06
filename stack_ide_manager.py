@@ -20,54 +20,6 @@ def send_request(window, request, on_response = None):
     if StackIDEManager.is_running(window):
         StackIDEManager.for_window(window).send_request(request, on_response)
 
-def configure_instance(window, settings):
-
-    folder = first_folder(window)
-
-    if not folder:
-        msg = "No folder to monitor for window " + str(window.id())
-        Log.normal("Window {}: {}".format(str(window.id()), msg))
-        instance = NoStackIDE(msg)
-
-    elif not has_cabal_file(folder):
-        msg = "No cabal file found in " + folder
-        Log.normal("Window {}: {}".format(str(window.id()), msg))
-        instance = NoStackIDE(msg)
-
-    elif not os.path.isfile(expected_cabalfile(folder)):
-        msg = "Expected cabal file " + expected_cabalfile(folder) + " not found"
-        Log.normal("Window {}: {}".format(str(window.id()), msg))
-        instance = NoStackIDE(msg)
-
-    elif not is_stack_project(folder):
-        msg = "No stack.yaml in path " + folder
-        Log.warning("Window {}: {}".format(str(window.id()), msg))
-        instance = NoStackIDE(msg)
-
-        # TODO: We should also support single files, which should get their own StackIDE instance
-        # which would then be per-view. Have a registry per-view that we check, then check the window.
-
-    else:
-        try:
-            # If everything looks OK, launch a StackIDE instance
-            Log.normal("Initializing window", window.id())
-            instance = StackIDE(window, settings)
-        except FileNotFoundError as e:
-            instance = NoStackIDE("instance init failed -- stack not found")
-            Log.error(e)
-            complain('stack-not-found',
-                "Could not find program 'stack'!\n\n"
-                "Make sure that 'stack' and 'stack-ide' are both installed. "
-                "If they are not on the system path, edit the 'add_to_PATH' "
-                "setting in SublimeStackIDE  preferences." )
-        except Exception:
-            instance = NoStackIDE("instance init failed -- unknown error")
-            Log.error("Failed to initialize window " + str(window.id()) + ":")
-            Log.error(traceback.format_exc())
-
-
-    return instance
-
 
 class StackIDEManager:
     ide_backend_instances = {}
@@ -114,7 +66,7 @@ class StackIDEManager:
         # Thw windows remaining in current_windows are new, so they have no instance.
         # We try to create one for them
         for window in current_windows.values():
-            cls.ide_backend_instances[window.id()] = configure_instance(window, cls.settings)
+            cls.ide_backend_instances[window.id()] = cls.configure_instance(window, cls.settings)
 
 
     @classmethod
@@ -151,6 +103,55 @@ class StackIDEManager:
     def configure(cls, settings):
         cls.settings = settings
 
+
+    @classmethod
+    def configure_instance(cls, window, settings):
+
+        folder = first_folder(window)
+
+        if not folder:
+            msg = "No folder to monitor for window " + str(window.id())
+            Log.normal("Window {}: {}".format(str(window.id()), msg))
+            instance = NoStackIDE(msg)
+
+        elif not has_cabal_file(folder):
+            msg = "No cabal file found in " + folder
+            Log.normal("Window {}: {}".format(str(window.id()), msg))
+            instance = NoStackIDE(msg)
+
+        elif not os.path.isfile(expected_cabalfile(folder)):
+            msg = "Expected cabal file " + expected_cabalfile(folder) + " not found"
+            Log.normal("Window {}: {}".format(str(window.id()), msg))
+            instance = NoStackIDE(msg)
+
+        elif not is_stack_project(folder):
+            msg = "No stack.yaml in path " + folder
+            Log.warning("Window {}: {}".format(str(window.id()), msg))
+            instance = NoStackIDE(msg)
+
+            # TODO: We should also support single files, which should get their own StackIDE instance
+            # which would then be per-view. Have a registry per-view that we check, then check the window.
+
+        else:
+            try:
+                # If everything looks OK, launch a StackIDE instance
+                Log.normal("Initializing window", window.id())
+                instance = StackIDE(window, settings)
+            except FileNotFoundError as e:
+                instance = NoStackIDE("instance init failed -- stack not found")
+                Log.error(e)
+                complain('stack-not-found',
+                    "Could not find program 'stack'!\n\n"
+                    "Make sure that 'stack' and 'stack-ide' are both installed. "
+                    "If they are not on the system path, edit the 'add_to_PATH' "
+                    "setting in SublimeStackIDE  preferences." )
+            except Exception:
+                instance = NoStackIDE("instance init failed -- unknown error")
+                Log.error("Failed to initialize window " + str(window.id()) + ":")
+                Log.error(traceback.format_exc())
+
+
+        return instance
 
 class NoStackIDE:
     """

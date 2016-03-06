@@ -1,4 +1,33 @@
-from .data import exp_types_response
+import contextlib
+from unittest.mock import Mock, patch
+from .data import exp_types_response, test_settings
+import stack_ide
+from stack_ide_manager import StackIDEManager
+
+def patched_stack_ide_manager(klass):
+    def fake_configure_instance(window, settings):
+        return stack_ide.StackIDE(window, test_settings, FakeBackend())
+
+    return patch('stack_ide_manager.StackIDEManager.configure_instance', new=fake_configure_instance)(klass)
+
+@contextlib.contextmanager
+def responses_for(window, responses):
+    """
+    Overrides the responses the fake backend send to the given window
+    """
+    backend, previous = None, None
+    stack_ide = StackIDEManager.for_window(window)
+    if stack_ide:
+        backend = stack_ide._backend
+
+    if backend:
+        previous = backend.responses
+        backend.responses = dict(previous, **responses)
+
+    yield
+
+    if backend:
+        backend.responses = previous
 
 def seq_response(seq_id, contents):
     contents['seq']= seq_id
@@ -19,7 +48,10 @@ class FakeBackend():
         if self.responses is None:
             raise Exception('stopthat!')
 
-    def send_request(self, req):
+        self.handler = None
+        self.send_request = Mock(wraps=self._send_request)
+
+    def _send_request(self, req):
 
         if self.handler:
             self.return_test_data(req)

@@ -1,8 +1,9 @@
 import unittest
 from unittest.mock import MagicMock, Mock, ANY
 from win import Win
+from . import fake_window_and_hs_view
 from .stubs import sublime
-from .mocks import cur_dir, default_mock_window
+from .fakebackend import patched_stack_ide_manager
 from utility import relative_view_file_name
 
 def create_source_error(filePath, kind, message):
@@ -22,10 +23,13 @@ def create_source_error(filePath, kind, message):
     }
 
 
+@patched_stack_ide_manager
 class WinTests(unittest.TestCase):
+    def setUp(self):
+        sublime.reset_stub()
 
     def test_highlight_type_clear(self):
-        (window, view) = default_mock_window()
+        window, view = fake_window_and_hs_view()
 
         Win(window).highlight_type([])
 
@@ -34,7 +38,7 @@ class WinTests(unittest.TestCase):
 
     def test_highlight_no_errors(self):
 
-        (window, view) = default_mock_window()
+        window, view = fake_window_and_hs_view()
 
         panel = MagicMock()
         window.create_output_panel = Mock(return_value=panel)
@@ -56,14 +60,9 @@ class WinTests(unittest.TestCase):
         window.run_command.assert_called_with("hide_panel", {"panel": "output.hide_errors"})
         panel.set_read_only.assert_any_call(True)
 
-
-
     def test_highlight_errors_and_warnings(self):
 
-        (window, view) = default_mock_window()
-
-        panel = MagicMock()
-        window.create_output_panel = Mock(return_value=panel)
+        window, view = fake_window_and_hs_view()
 
         filePath = relative_view_file_name(view)
         error = create_source_error(filePath, "KindError", "<error message here>")
@@ -73,14 +72,14 @@ class WinTests(unittest.TestCase):
         Win(window).handle_source_errors(errors)
 
         # panel recreated
-        window.create_output_panel.assert_called_with("hide_errors")
+        panel = window.create_output_panel("hide_errors")
         window.run_command.assert_any_call("hide_panel",  {"panel": "output.hide_errors"})
-        # panel.run_command.assert_any_call("clear_error_panel")
+        panel.run_command.assert_any_call("clear_error_panel")
         panel.set_read_only.assert_any_call(False)
 
         # panel should have received two messages
-        panel.run_command.assert_any_call("append_to_error_panel", {"message": "src/Main.hs:1:1: KindError:\n<error message here>"})
-        panel.run_command.assert_any_call("append_to_error_panel", {"message": "src/Main.hs:1:1: KindWarning:\n<warning message here>"})
+        panel.run_command.assert_any_call("append_to_error_panel", {"message": "Main.hs:1:1: KindError:\n<error message here>"})
+        panel.run_command.assert_any_call("append_to_error_panel", {"message": "Main.hs:1:1: KindWarning:\n<warning message here>"})
 
         # regions added
         view.add_regions.assert_called_with("warnings", [ANY], "comment", "dot", sublime.DRAW_OUTLINED)
@@ -92,11 +91,7 @@ class WinTests(unittest.TestCase):
 
     def test_opens_views_for_errors(self):
 
-        (window, view) = default_mock_window()
-        window.find_open_file = Mock(side_effect=[None, view]) # first call None, second call is created
-
-        panel = MagicMock()
-        window.create_output_panel = Mock(return_value=panel)
+        window, main_hs_view = fake_window_and_hs_view()
 
         error = create_source_error("src/Lib.hs", "KindError", "<error message here>")
         errors = [error]
@@ -104,10 +99,10 @@ class WinTests(unittest.TestCase):
         Win(window).handle_source_errors(errors)
 
         # should have opened the file for us.
-        window.open_file.assert_called_with(cur_dir + "/projects/helloworld/src/Lib.hs")
+        window.open_file.assert_called_with("/home/user/some/project/src/Lib.hs")
 
         # panel recreated
-        window.create_output_panel.assert_called_with("hide_errors")
+        panel = window.create_output_panel("hide_errors")
         window.run_command.assert_any_call("hide_panel",  {"panel": "output.hide_errors"})
         # panel.run_command.assert_any_call("clear_error_panel")
         panel.set_read_only.assert_any_call(False)
@@ -116,8 +111,9 @@ class WinTests(unittest.TestCase):
         panel.run_command.assert_any_call("append_to_error_panel", {"message": "src/Lib.hs:1:1: KindError:\n<error message here>"})
 
         # regions added
-        view.add_regions.assert_called_with("warnings", [], "comment", "dot", sublime.DRAW_OUTLINED)
-        view.add_regions.assert_any_call('errors', [ANY], 'invalid', 'dot', 2)
+        lib_hs_view = window.find_open_file('/home/user/some/project/src/Lib.hs')
+        lib_hs_view.add_regions.assert_called_with("warnings", [], "comment", "dot", sublime.DRAW_OUTLINED)
+        lib_hs_view.add_regions.assert_any_call('errors', [ANY], 'invalid', 'dot', 2)
 
         # panel shown and locked
         window.run_command.assert_called_with("show_panel", {"panel": "output.hide_errors"})
