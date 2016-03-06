@@ -1,4 +1,7 @@
+import contextlib
+import os
 import unittest
+from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, Mock
 from stack_ide_manager import NoStackIDE, StackIDEManager, configure_instance
 import stack_ide
@@ -148,23 +151,34 @@ class LaunchTests(unittest.TestCase):
         self.assertRegex(instance.reason, "No folder to monitor.*")
 
     def test_launch_window_with_empty_folder(self):
-        instance = configure_instance(
-            mock_window([cur_dir + '/projects/empty_project']), test_settings)
-        self.assertIsInstance(instance, NoStackIDE)
-        self.assertRegex(instance.reason, "No cabal file found.*")
+        with fake_project(['empty_project/Main.hs']) as prj:
+            instance = configure_instance(
+                mock_window([prj('hempty_project')]), test_settings)
+            self.assertIsInstance(instance, NoStackIDE)
+            self.assertRegex(instance.reason, "No cabal file found.*")
 
     def test_launch_window_with_cabal_folder(self):
-        instance = configure_instance(
-            mock_window([cur_dir + '/projects/cabal_project']), test_settings)
-        self.assertIsInstance(instance, NoStackIDE)
-        self.assertRegex(instance.reason, "No stack.yaml in path.*")
+        cabal_project = [
+            'cabal_project/cabal_project.cabal',
+            'cabal_project/Main.hs',
+        ]
+        with fake_project(cabal_project) as prj:
+            instance = configure_instance(
+                mock_window([prj('cabal_project')]), test_settings)
+            self.assertIsInstance(instance, NoStackIDE)
+            self.assertRegex(instance.reason, "No stack.yaml in path.*")
 
     def test_launch_window_with_wrong_cabal_file(self):
-        instance = configure_instance(
-            mock_window([cur_dir + '/projects/cabalfile_wrong_project']), test_settings)
-        self.assertIsInstance(instance, NoStackIDE)
-        self.assertRegex(
-            instance.reason, "cabalfile_wrong_project.cabal not found.*")
+        cabalfile_wrong_project = [
+            'cabal_project/badly_name_cabal_file.cabal',
+            'cabal_project/stack.yaml',
+            'cabal_project/Main.hs',
+        ]
+        with fake_project(cabalfile_wrong_project) as prj:
+            instance = configure_instance(
+                mock_window([prj('cabal_project')]), test_settings)
+            self.assertIsInstance(instance, NoStackIDE)
+            self.assertRegex(instance.reason, "cabal_project.cabal not found.*")
 
     @unittest.skip("Actually starts a stack ide, slow and won't work on Travis")
     def test_launch_window_with_helloworld_project(self):
@@ -173,21 +187,37 @@ class LaunchTests(unittest.TestCase):
         self.assertIsInstance(instance, stack_ide.StackIDE)
         instance.end()
 
+    ok_project = [
+        'ok_project/ok_project.cabal',
+        'ok_project/stack.yaml',
+        'ok_project/src/Main.hs',
+    ]
     def test_launch_window_stack_not_found(self):
-
         stack_ide.stack_ide_start = Mock(side_effect=FileNotFoundError())
-        instance = configure_instance(
-            mock_window([cur_dir + '/projects/helloworld']), test_settings)
-        self.assertIsInstance(instance, NoStackIDE)
-        self.assertRegex(
-            instance.reason, "instance init failed -- stack not found")
-        self.assertRegex(sublime.current_error, "Could not find program 'stack'!")
+        with fake_project(self.ok_project) as prj:
+            instance = configure_instance(mock_window([prj('ok_project')]), test_settings)
+            self.assertIsInstance(instance, NoStackIDE)
+            self.assertRegex(instance.reason, "instance init failed -- stack not found")
+            self.assertRegex(sublime.current_error, "Could not find program 'stack'!")
 
     def test_launch_window_stack_unknown_error(self):
-
         stack_ide.stack_ide_start = Mock(side_effect=Exception())
-        instance = configure_instance(
-            mock_window([cur_dir + '/projects/helloworld']), test_settings)
-        self.assertIsInstance(instance, NoStackIDE)
-        self.assertRegex(
-            instance.reason, "instance init failed -- unknown error")
+        with fake_project(self.ok_project) as prj:
+            instance = configure_instance(mock_window([prj('ok_project')]), test_settings)
+            self.assertIsInstance(instance, NoStackIDE)
+            self.assertRegex(instance.reason, "instance init failed -- unknown error")
+
+
+
+@contextlib.contextmanager
+def fake_project(files):
+    with TemporaryDirectory() as dir:
+        for file in files:
+            if os.path.isabs(file):
+                raise Exception("Can't accept absolute paths: {}".format(file))
+            full_name = os.path.join(dir, file)
+            full_dir = os.path.dirname(full_name)
+            if not os.path.exists(full_dir):
+                os.makedirs(full_dir)
+            open(full_name, 'w').close()
+        yield lambda file: os.path.join(dir, file)
