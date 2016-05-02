@@ -19,14 +19,6 @@ class Win:
     def __init__(self,window):
         self.window = window
 
-    def update_completions(self, completions):
-        """
-        Dispatches to the dummy UpdateCompletionsCommand, which is intercepted
-        by StackIDEAutocompleteHandler's on_window_command to update its list
-        of completions.
-        """
-        self.window.run_command("update_completions", {"completions":completions})
-
     def find_view_for_path(self, relative_path):
         full_path = os.path.join(first_folder(self.window), relative_path)
         return self.window.find_open_file(full_path)
@@ -57,7 +49,6 @@ class Win:
         for view in self.window.views():
             view.set_status("type_at_cursor", "")
             view.add_regions("type_at_cursor", [], "storage.type", "", sublime.DRAW_OUTLINED)
-
 
     def handle_source_errors(self, source_errors):
         """
