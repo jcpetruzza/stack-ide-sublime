@@ -21,13 +21,6 @@ class StackIDETests(unittest.TestCase):
         self.assertTrue(instance.is_active)
         self.assertTrue(instance.is_alive)
 
-        # it got the load targets
-        self.assertEqual(2, len(instance.include_targets))
-
-        # it should also have called get source errors,
-        # but FakeBackend sends no errors back by default.
-
-
     def test_can_send_source_errors_request(self):
         backend = FakeBackend()
         instance = stackide.StackIDE(self.window, _test_settings, backend)

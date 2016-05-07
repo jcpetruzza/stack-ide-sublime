@@ -42,6 +42,8 @@ class FakeView():
         self.set_read_only = Mock()
         self.run_command = Mock()
 
+    __hash__ = None  # sublime Views are not hashable (don't use them as keys!)
+
     def id(self):
         return self._id
 
@@ -140,7 +142,7 @@ def reset_stub():
     fake_windows = []
     clipboard = None
 
-def create_window(folders):
+def create_window(folders=[]):
     global fake_windows
     window = FakeWindow(folders)
     fake_windows.append(window)

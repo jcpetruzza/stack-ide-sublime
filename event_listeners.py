@@ -7,8 +7,8 @@ import sys, os
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 
 import req
-from utility import is_haskell_view, relative_view_file_name, span_from_view_selection
-from win import Win
+from utility import is_haskell_view, span_from_view_selection
+from view import View
 from stack_ide_manager import StackIDEManager, send_request
 from response import parse_autocompletions
 
@@ -22,10 +22,8 @@ class StackIDESaveListener(sublime_plugin.EventListener):
         if not is_haskell_view(view):
             return
 
-        if not StackIDEManager.is_running(view.window()):
-            return
+        view.run_command('update_in_ide_backend')
 
-        StackIDEManager.for_window(view.window()).update_files([relative_view_file_name(view)])
 
 class StackIDETypeAtCursorHandler(sublime_plugin.EventListener):
     """
@@ -37,8 +35,7 @@ class StackIDETypeAtCursorHandler(sublime_plugin.EventListener):
         if not is_haskell_view(view):
             return
 
-        window = view.window()
-        if not StackIDEManager.is_running(window):
+        if not StackIDEManager.is_running(view):
             return
 
         # Only try to get types for views into files
@@ -46,8 +43,10 @@ class StackIDETypeAtCursorHandler(sublime_plugin.EventListener):
         if view.file_name():
             # Uncomment to see the scope at the cursor:
             # Log.debug(view.scope_name(view.sel()[0].begin()))
-            request = req.get_exp_types(span_from_view_selection(view))
-            send_request(window, request, Win(window).highlight_type)
+            request = req.get_exp_types(
+                span_from_view_selection(view, lambda view: View(view).file_name_relative_to_cabal_dir()),
+            )
+            send_request(view, request, View(view).highlight_type)
 
 
 class StackIDEAutocompleteHandler(sublime_plugin.EventListener):
@@ -65,16 +64,18 @@ class StackIDEAutocompleteHandler(sublime_plugin.EventListener):
         if not is_haskell_view(view):
             return
 
-        window = view.window()
-        if not StackIDEManager.is_running(window):
+        if not StackIDEManager.is_running(view):
             return
         # Check if this completion query is due to our refreshing the completions list
         # after receiving a response from stack-ide, and if so, don't send
         # another request for completions.
         if not self.refreshing:
             self.view = view
-            request = req.get_autocompletion(filepath=relative_view_file_name(view),prefix=prefix)
-            send_request(window, request, self._handle_response)
+            request = req.get_autocompletion(
+                filepath=View(view).file_name_relative_to_cabal_dir(),
+                prefix=prefix,
+            )
+            send_request(view, request, self._handle_response)
 
         # Clear the flag to allow future completion queries
         self.refreshing = False

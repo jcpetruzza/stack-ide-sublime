@@ -11,9 +11,8 @@ import uuid
 
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 
-from utility import first_folder, complain
+from utility import complain
 from log import Log
-from win import Win
 import req
 import response as res
 
@@ -27,33 +26,23 @@ if os.name == 'nt':
 class StackIDE:
 
 
-    def __init__(self, window, settings, backend=None):
-        self.window = window
-
+    def __init__(self, cabal_file_dir, settings, backend=None):
         self.conts = {} # Map from uuid to response handler
         self.is_alive  = True
         self.is_active = False
         self.process   = None
-        self.project_path = first_folder(window)
-        (project_in, project_name) = os.path.split(self.project_path)
-        self.project_name = project_name
+        self.project_path = cabal_file_dir
+        self.project_name = '.'  # since we run stack from the cabal dir, we can use '.' for project_name
 
         reset_env(settings.add_to_PATH)
 
         if backend is None:
             self._backend = stack_ide_start(self.project_path, self.project_name, self.handle_response)
-            self.stack_ide_loadtargets = stack_ide_loadtargets
         else: # for testing
             self._backend = backend
             self._backend.handler = self.handle_response
-            self.stack_ide_loadtargets = backend.fake_loadtargets_response
 
         self.is_active = True
-        self.include_targets = set()
-
-        # TODO: could check packages here to fix the 'project_dir must equal packagename issue'
-
-        sublime.set_timeout_async(self.load_initial_targets, 0)
 
 
     def send_request(self, request, response_handler = None):
@@ -71,30 +60,13 @@ class StackIDE:
         else:
             Log.error("Couldn't send request, no process!", request)
 
-
-    def load_initial_targets(self):
-        """
-        Get the initial list of files to check
-        """
-        initial_targets = self.stack_ide_loadtargets(self.project_path, self.project_name)
-        sublime.set_timeout(lambda: self.update_files(initial_targets), 0)
-
-
-    def update_new_include_targets(self, filepaths):
-        for filepath in filepaths:
-            self.include_targets.add(filepath)
-        return list(self.include_targets)
-
     def update_files(self, filenames):
-        new_include_targets = self.update_new_include_targets(filenames)
-        self.send_request(req.update_session_includes(new_include_targets))
-        self.send_request(req.get_source_errors(), Win(self.window).handle_source_errors)
+        self.send_request(req.update_session_includes(filenames))
 
     def end(self):
         """
         Ask stack-ide to shut down.
         """
-        Win(self.window).hide_error_panel()
         self.send_request(req.get_shutdown())
         self.die()
 
@@ -253,7 +225,7 @@ class JsonProcessBackend:
 
             # self.die()
                 # Ideally we would like to die(), so that, if the error is transient,
-                # we attempt to reconnect on the next check_windows() call. The problem
+                # we attempt to reconnect on the next check_views() call. The problem
                 # is that the stack-ide (ide-backend, actually) is not cleaning up those
                 # session.* directories and they would keep accumulating, one per second!
                 # So instead we do:

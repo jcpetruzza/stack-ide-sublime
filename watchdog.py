@@ -7,7 +7,7 @@ except ImportError:
 
 from settings import Settings
 from log import Log
-from win import Win
+from view import View
 from stack_ide_manager import StackIDEManager
 
 
@@ -26,8 +26,8 @@ def plugin_loaded():
     settings = load_settings()
     Log._set_verbosity(settings.verbosity)
     StackIDEManager.configure(settings)
-    Win.show_popup = settings.show_popup
-    Win.hoogle_url = settings.hoogle_url
+    View.show_popup = settings.show_popup
+    View.hoogle_url = settings.hoogle_url
     watchdog = StackIDEWatchdog()
 
 def plugin_unloaded():
@@ -59,9 +59,9 @@ def on_settings_changed():
         StackIDEManager.configure(updated_settings)
         StackIDEManager.reset()
     elif updated_settings.show_popup != settings.show_popup:
-        Win.show_popup = updated_settings.show_popup
+        View.show_popup = updated_settings.show_popup
     elif updated_settings.hoogle_url != settings.hoogle_url:
-        Win.hoogle_url = updated_settings.hoogle_url
+        View.hoogle_url = updated_settings.hoogle_url
 
     settings = updated_settings
 
@@ -77,7 +77,7 @@ class StackIDEWatchdog():
         self.check_for_processes()
 
     def check_for_processes(self):
-        StackIDEManager.check_windows()
+        StackIDEManager.check_views()
         self.timer = threading.Timer(1.0, self.check_for_processes)
         self.timer.start()
 

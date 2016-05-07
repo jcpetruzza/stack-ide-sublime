@@ -17,12 +17,12 @@ class SendStackIdeRequestCommand(sublime_plugin.WindowCommand):
     def __init__(self, window):
         super(SendStackIdeRequestCommand, self).__init__(window)
 
-    def run(self, request):
+    def run(self, view, request):
         """
-        Pass a request to stack-ide.
-        Called via run_command("send_stack_ide_request", {"request":})
+        Pass a request to stack-ide for a given view.
+        Called via run_command("send_stack_ide_request", view, {"request": ...})
         """
-        instance = StackIDEManager.for_window(self.window)
+        instance = StackIDEManager.for_view(view)
         if instance:
             instance.send_request(request)
 

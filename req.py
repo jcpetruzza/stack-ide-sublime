@@ -3,7 +3,7 @@ def update_session_includes(filepaths):
         "tag":"RequestUpdateSession",
         "contents":
             [ { "tag": "RequestUpdateTargets",
-                "contents": {"tag": "TargetsInclude", "contents": filepaths }
+                "contents": {"tag": "TargetsInclude", "contents": list(sorted(filepaths)) } # sort them to make tests deterministic
               }
             ]
         }

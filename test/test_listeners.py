@@ -7,8 +7,8 @@ from .fakebackend import patched_stack_ide_manager, responses_for
 from .stubs import sublime
 from settings import Settings
 import req
+from view import View
 import stack_ide
-import utility as util
 from .data import many_completions
 
 
@@ -23,7 +23,7 @@ span = {
 exp_types_response = {"tag": "", "contents": [[type_info, span]]}
 request_include_targets = {'contents': [{'contents': {'contents': ['src/Main.hs'], 'tag': 'TargetsInclude'}, 'tag': 'RequestUpdateTargets'}], 'tag': 'RequestUpdateSession'}
 
-@patched_stack_ide_manager
+@patched_stack_ide_manager()
 class ListenerTests(unittest.TestCase):
     def setUp(self):
         sublime.reset_stub()
@@ -32,45 +32,36 @@ class ListenerTests(unittest.TestCase):
         listener = StackIDESaveListener()
         window, view = fake_window_and_hs_view()
 
-        backend = StackIDEManager.for_window(window)._backend
-        backend.send_request.reset_mock()
-
         listener.on_post_save(view)
-        backend.send_request.assert_called_with(ANY)
-
+        view.run_command.assert_called_once_with('update_in_ide_backend')
 
     def test_ignores_non_haskell_views(self):
         listener = StackIDESaveListener()
         window, hs_view = fake_window_and_hs_view()
         non_hs_view = window.open_file('low_level.c')
 
-        backend = StackIDEManager.for_window(window)._backend
-
-        backend.send_request.reset_mock()
         listener.on_post_save(non_hs_view)
-        backend.send_request.assert_not_called()
-
+        non_hs_view.run_command.assert_not_called()
 
     def test_type_at_cursor_tests(self):
         listener = StackIDETypeAtCursorHandler()
         window, view = fake_window_and_hs_view()
 
-        with responses_for(window, exp_types_response):
+        with responses_for(view, exp_types_response):
             listener.on_selection_modified(view)
             view.set_status.assert_called_with("type_at_cursor", type_info)
             view.add_regions.assert_called_with("type_at_cursor", ANY, "storage.type", "", sublime.DRAW_OUTLINED)
 
     def test_request_completions(self):
-
         listener = StackIDEAutocompleteHandler()
         window, view = fake_window_and_hs_view()
 
-        backend = StackIDEManager.for_window(window)._backend
+        backend = StackIDEManager.for_view(view)._backend
 
-        with responses_for(window, {'RequestGetAutocompletion': many_completions}):
+        with responses_for(view, {'RequestGetAutocompletion': many_completions}):
             listener.on_query_completions(view, 'm', []) #locations not used.
 
-            request = req.get_autocompletion(filepath=util.relative_view_file_name(view),prefix="m")
+            request = req.get_autocompletion(filepath=View(view).file_name_relative_to_cabal_dir(),prefix="m")
             request['seq'] = ANY
             backend.send_request.assert_called_with(request)
 
@@ -78,7 +69,7 @@ class ListenerTests(unittest.TestCase):
         listener = StackIDEAutocompleteHandler()
         window, view = fake_window_and_hs_view()
 
-        with responses_for(window, {'RequestGetAutocompletion': many_completions}):
+        with responses_for(view, {'RequestGetAutocompletion': many_completions}):
             completions = listener.on_query_completions(view, 'm', []) #locations not used.
 
             self.assertEqual(8, len(completions))

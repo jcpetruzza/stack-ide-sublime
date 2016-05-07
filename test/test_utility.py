@@ -1,3 +1,4 @@
+import os
 import unittest
 import utility
 from .stubs import sublime
@@ -5,11 +6,6 @@ from .stubs import sublime
 class UtilTests(unittest.TestCase):
     def setUp(self):
         sublime.reset_stub()
-
-    def test_get_relative_filename(self):
-        window = sublime.create_window(['/home/user/projects/helloworld'])
-        view = window.open_file('/home/user/projects/helloworld/src/Main.hs')
-        self.assertEqual('src/Main.hs', utility.relative_view_file_name(view))
 
     def test_is_haskell_view(self):
         window = sublime.create_window(['/home/user/projects/helloworld'])
@@ -19,9 +15,12 @@ class UtilTests(unittest.TestCase):
         self.assertFalse(utility.is_haskell_view(c_view))
 
     def test_span_from_view_selection(self):
-        window = sublime.create_window(['/home/user/projects/helloworld'])
-        view = window.open_file('/home/user/projects/helloworld/src/Main.hs')
-        span = utility.span_from_view_selection(view)
+        project_dir = '/home/user/projects/helloworld'
+        window = sublime.create_window()
+        view = window.open_file(os.path.join(project_dir, 'src/Main.hs'))
+        get_rel_file_name = lambda view: view.file_name()[len(project_dir)+1:]
+
+        span = utility.span_from_view_selection(view, get_rel_file_name)
         self.assertEqual(1, span['spanFromLine'])
         self.assertEqual(1, span['spanToLine'])
         self.assertEqual(1, span['spanFromColumn'])

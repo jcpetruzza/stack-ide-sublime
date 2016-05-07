@@ -4,25 +4,77 @@ import os
 
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 
+from collections import namedtuple
+
 from stack_ide import StackIDE
 from log import Log
-from utility import first_folder,expected_cabalfile,has_cabal_file, is_stack_project, complain, reset_complaints
+from utility import is_haskell_view, expected_cabalfile, get_cabal_files, is_stack_project, complain, reset_complaints
+from win import Win
 try:
     import sublime
 except ImportError:
     from test.stubs import sublime
 
-def send_request(window, request, on_response = None):
+
+def send_request(view, request, on_response = None):
     """
-    Sends the given request to the (view's) window's stack-ide instance,
+    Sends the given request to the view's stack-ide instance,
     optionally handling its response
     """
-    if StackIDEManager.is_running(window):
-        StackIDEManager.for_window(window).send_request(request, on_response)
+    if StackIDEManager.is_running(view):
+        StackIDEManager.for_view(view).send_request(request, on_response)
+
+
+# We assign a different ide-backend instance to each library/executable in any cabal project per yaml file
+class StackIDEInstanceKey(namedtuple('StackIDEInstanceKey', 'stack_yaml_dir cabal_file_dir component')):
+    @classmethod
+    def for_filename(cls, filename):
+        if filename is None:
+            return None
+
+        cabal_dir, cabal_file_name = None, None
+        current_path = filename
+
+        while True:
+            path = os.path.dirname(current_path)
+            if path == current_path:
+                return None  # We've searched all the directories up to the root, found nothing
+
+            current_path = path
+
+            cabal_files = get_cabal_files(current_path)
+
+            if len(cabal_files) == 1:
+                expected = os.path.basename(expected_cabalfile(current_path))
+                cabal_dir, cabal_file_name = current_path, cabal_files[0]
+                if cabal_file_name != expected:
+                    Log.warning(
+                        "Cabal file name doesn't match directory name: ",
+                        os.path.join(current_path, cabal_file_name),
+                    )
+            elif len(cabal_files) > 1:
+                    Log.warning("Too many cabal files in {}".format(current_path))
+
+            if is_stack_project(current_path):
+                if cabal_dir == None:
+                    Log.warning("A stack.yaml found before a cabal file in ", current_path)
+                else:
+                    # Ideally the component would be a function of the directory in which the
+                    # original hs file is found wrt to the cabal file. So it could be the library
+                    # part or an executable or a unit-test, etc. For now, it is always the library
+                    # (stack-ide doesn't support finer grained specification)
+                    component, _ = os.path.splitext(cabal_file_name)
+                    return cls(
+                        stack_yaml_dir=current_path,
+                        cabal_file_dir=cabal_dir,
+                        component=component,
+                    )
 
 
 class StackIDEManager:
     ide_backend_instances = {}
+    view_mappings = {}
+
     settings = None
 
     @classmethod
@@ -30,55 +82,63 @@ class StackIDEManager:
         return cls.ide_backend_instances
 
     @classmethod
-    def check_windows(cls):
+    def check_views(cls):
         """
-        Compares the current windows with the list of instances:
-          - new windows are assigned a process of stack-ide each
+        Compares the current views on every current window with the known ide-backend instances
+          - new views are assigned a (not necessarily new) process of stack-ide, based on their cabal project
           - stale processes are stopped
 
-        NB. This is the only method that updates ide_backend_instances,
-        so as long as it is not called concurrently, there will be no
-        race conditions...
+        NB. This is the only method that updates ide_backend_instances and view_mappings,
+        so as long as it is not called concurrently, there will be no race conditions...
         """
-        current_windows = {w.id(): w for w in sublime.windows()}
+        is_relevant_view = lambda v: is_haskell_view(v) and v.file_name() is not None
+        get_key = lambda v: cls.find_key_for_file_name(v.file_name())
+
+        current_hs_views = {v.id(): get_key(v) for w in sublime.windows() for v in w.views() if is_relevant_view(v)}
+        current_keys = set(current_hs_views.values())
         updated_instances = {}
 
         # Kill stale instances, keep live ones
-        for win_id,instance in cls.ide_backend_instances.items():
-            if win_id not in current_windows:
-                # This is a window that is now closed, we may need to kill its process
+        for key, instance in cls.ide_backend_instances.items():
+            if key not in current_keys:
+                # This instance has no longer a corresponding view, we may need to kill its process
                 if instance.is_active:
-                    Log.normal("Stopping stale process for window", win_id)
+                    Log.normal("Stopping stale process for ", key)
                     instance.end()
             else:
-                # This window is still active. There are three possibilities:
-                #  1) it has an alive and active instance.
-                #  2) it has an alive but inactive instance (one that failed to init, etc)
-                #  3) it has a dead instance, i.e., one that was killed.
+                # There is still at least one view using this instance. There are three possibilities:
+                #  1) the instance is alive and active.
+                #  2) the instance is alive but inactive (it is one that failed to init, etc)
+                #  3) the instance is dead instance, i.e., one that was killed.
                 #
-                # A window with a dead instances is treated like a new one, so we will
-                # try to launch a new instance for it
+                # Views with dead instances are to be treated like new views, so we will
+                # try to launch a new instance for them
                 if instance.is_alive:
-                    del current_windows[win_id]
-                    updated_instances[win_id] = instance
+                    current_keys.remove(key)
+                    updated_instances[key] = instance
 
         cls.ide_backend_instances = updated_instances
-        # Thw windows remaining in current_windows are new, so they have no instance.
+
+        # The views that still have a key in current_keys are new, so they have no instance.
         # We try to create one for them
-        for window in current_windows.values():
-            cls.ide_backend_instances[window.id()] = cls.configure_instance(window, cls.settings)
+        for key in current_keys:
+            if key:
+                cls.ide_backend_instances[key] = cls.launch_instance(key, cls.settings)
+
+        cls.view_mappings = current_hs_views
 
 
     @classmethod
-    def is_running(cls, window):
-        if not window:
+    def is_running(cls, view):
+        if not view:
             return False
-        return cls.for_window(window) is not None
+        return cls.for_view(view) is not None
 
 
     @classmethod
-    def for_window(cls, window):
-        instance = cls.ide_backend_instances.get(window.id())
+    def for_view(cls, view):
+        key = cls.view_mappings.get(view.id())
+        instance = cls.ide_backend_instances.get(key)
         if instance and not instance.is_active:
             instance = None
 
@@ -86,7 +146,9 @@ class StackIDEManager:
 
     @classmethod
     def kill_all(cls):
-        # Log.normal("Killing all stack-ide-sublime instances:", {k:str(v) for k, v in cls.ide_backend_instances.items()})
+        for window in sublime.windows():
+            if any(view.id() in cls.view_mappings for view in window.views()):
+                Win(window).hide_error_panel()
         for instance in cls.ide_backend_instances.values():
             instance.end()
 
@@ -103,53 +165,27 @@ class StackIDEManager:
     def configure(cls, settings):
         cls.settings = settings
 
+    @classmethod
+    def find_key_for_file_name(cls, file_name):
+        return StackIDEInstanceKey.for_filename(file_name)
 
     @classmethod
-    def configure_instance(cls, window, settings):
-
-        folder = first_folder(window)
-
-        if not folder:
-            msg = "No folder to monitor for window " + str(window.id())
-            Log.normal("Window {}: {}".format(str(window.id()), msg))
-            instance = NoStackIDE(msg)
-
-        elif not has_cabal_file(folder):
-            msg = "No cabal file found in " + folder
-            Log.normal("Window {}: {}".format(str(window.id()), msg))
-            instance = NoStackIDE(msg)
-
-        elif not os.path.isfile(expected_cabalfile(folder)):
-            msg = "Expected cabal file " + expected_cabalfile(folder) + " not found"
-            Log.normal("Window {}: {}".format(str(window.id()), msg))
-            instance = NoStackIDE(msg)
-
-        elif not is_stack_project(folder):
-            msg = "No stack.yaml in path " + folder
-            Log.warning("Window {}: {}".format(str(window.id()), msg))
-            instance = NoStackIDE(msg)
-
-            # TODO: We should also support single files, which should get their own StackIDE instance
-            # which would then be per-view. Have a registry per-view that we check, then check the window.
-
-        else:
-            try:
-                # If everything looks OK, launch a StackIDE instance
-                Log.normal("Initializing window", window.id())
-                instance = StackIDE(window, settings)
-            except FileNotFoundError as e:
-                instance = NoStackIDE("instance init failed -- stack not found")
-                Log.error(e)
-                complain('stack-not-found',
-                    "Could not find program 'stack'!\n\n"
-                    "Make sure that 'stack' and 'stack-ide' are both installed. "
-                    "If they are not on the system path, edit the 'add_to_PATH' "
-                    "setting in SublimeStackIDE  preferences." )
-            except Exception:
-                instance = NoStackIDE("instance init failed -- unknown error")
-                Log.error("Failed to initialize window " + str(window.id()) + ":")
-                Log.error(traceback.format_exc())
-
+    def launch_instance(cls, key, settings):
+        Log.normal("Initializing instance for", key.cabal_file_dir)
+        try:
+            instance = StackIDE(key.cabal_file_dir, settings)
+        except FileNotFoundError as e:
+            instance = NoStackIDE("instance init failed -- stack not found")
+            Log.error(e)
+            complain('stack-not-found',
+                "Could not find program 'stack'!\n\n"
+                "Make sure that 'stack' and 'stack-ide' are both installed. "
+                "If they are not on the system path, edit the 'add_to_PATH' "
+                "setting in SublimeStackIDE  preferences." )
+        except Exception:
+            instance = NoStackIDE("instance init failed -- unknown error")
+            Log.error("Failed to initialize instance for {}:".format(key.cabal_file_dir))
+            Log.error(traceback.format_exc())
 
         return instance
 

@@ -26,23 +26,12 @@ def reset_complaints():
     complaints_shown = set()
 
 
-def first_folder(window):
+def get_cabal_files(project_path):
     """
-    We only support running one stack-ide instance per window currently,
-    on the first folder open in that window.
-    """
-    if len(window.folders()):
-        return window.folders()[0]
-    else:
-        Log.normal("Couldn't find a folder for stack-ide-sublime")
-        return None
-
-def has_cabal_file(project_path):
-    """
-    Check if a cabal file exists in the project folder
+    Returns a list with all .cabal file exists in the given path
     """
     files = glob.glob(os.path.join(project_path, "*.cabal"))
-    return len(files) > 0
+    return [os.path.basename(file) for file in files if os.path.isfile(file)]
 
 def expected_cabalfile(project_path):
     """
@@ -57,14 +46,8 @@ def is_stack_project(project_path):
     """
     return os.path.isfile(os.path.join(project_path, "stack.yaml"))
 
-def relative_view_file_name(view):
-    """
-    ide-backend expects file names as relative to the cabal project root
-    """
-    return view.file_name().replace(first_folder(view.window()) + os.path.sep, "")
-
-def span_from_view_selection(view):
-    return span_from_view_region(view, view.sel()[0])
+def span_from_view_selection(view, get_rel_file_name):
+    return span_from_view_region(view, view.sel()[0], get_rel_file_name)
 
 def within(smaller, larger):
     return smaller.begin() >= larger.begin() and smaller.end() <= larger.end()
@@ -114,11 +97,11 @@ def view_region_from_span(view, span):
         view.text_point(span.fromLine - 1, span.fromColumn - 1),
         view.text_point(span.toLine - 1, span.toColumn - 1))
 
-def span_from_view_region(view, region):
+def span_from_view_region(view, region, get_rel_file_name):
     (from_line, from_col) = view.rowcol(region.begin())
     (to_line,   to_col)   = view.rowcol(region.end())
     return {
-        "spanFilePath": relative_view_file_name(view),
+        "spanFilePath": get_rel_file_name(view),
         "spanFromLine": from_line + 1,
         "spanFromColumn": to_col + 1,
         "spanToLine": to_line + 1,
