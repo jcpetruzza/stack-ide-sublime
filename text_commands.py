@@ -6,8 +6,8 @@ except ImportError:
 import os, sys
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 
+import req
 from utility import span_from_view_selection, first_folder, filter_enclosing
-from req import Req
 from stack_ide_manager import send_request
 from response import parse_span_info_response, parse_exp_types
 
@@ -31,7 +31,7 @@ class ShowHsTypeAtCursorCommand(sublime_plugin.TextCommand):
     expression under the cursor and, if available, shows it as a pop-up.
     """
     def run(self,edit):
-        request = Req.get_exp_types(span_from_view_selection(self.view))
+        request = req.get_exp_types(span_from_view_selection(self.view))
         send_request(self.view.window(),request, self._handle_response)
 
     def _handle_response(self,response):
@@ -49,7 +49,7 @@ class ShowHsInfoAtCursorCommand(sublime_plugin.TextCommand):
     expression under the cursor and, if available, shows it as a pop-up.
     """
     def run(self,edit):
-        request = Req.get_exp_info(span_from_view_selection(self.view))
+        request = req.get_exp_info(span_from_view_selection(self.view))
         send_request(self.view.window(), request, self._handle_response)
 
     def _handle_response(self,response):
@@ -76,7 +76,7 @@ class GotoDefinitionAtCursorCommand(sublime_plugin.TextCommand):
     expression under the cursor and, if available, navigates to its location
     """
     def run(self,edit):
-        request = Req.get_exp_info(span_from_view_selection(self.view))
+        request = req.get_exp_info(span_from_view_selection(self.view))
         send_request(self.view.window(),request, self._handle_response)
 
     def _handle_response(self,response):
@@ -102,7 +102,7 @@ class CopyHsTypeAtCursorCommand(sublime_plugin.TextCommand):
     expression under the cursor and, if available, puts it in the clipboard.
     """
     def run(self,edit):
-        request = Req.get_exp_types(span_from_view_selection(self.view))
+        request = req.get_exp_types(span_from_view_selection(self.view))
         send_request(self.view.window(), request, self._handle_response)
 
     def _handle_response(self,response):

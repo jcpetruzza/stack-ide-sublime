@@ -2,11 +2,11 @@ import unittest
 from unittest.mock import Mock, ANY
 from event_listeners import StackIDESaveListener, StackIDETypeAtCursorHandler, StackIDEAutocompleteHandler
 from stack_ide_manager import StackIDEManager
-from req import Req
 from . import fake_window_and_hs_view
 from .fakebackend import patched_stack_ide_manager, responses_for
 from .stubs import sublime
 from settings import Settings
+import req
 import stack_ide
 import utility as util
 from .data import many_completions
@@ -70,9 +70,9 @@ class ListenerTests(unittest.TestCase):
         with responses_for(window, {'RequestGetAutocompletion': many_completions}):
             listener.on_query_completions(view, 'm', []) #locations not used.
 
-            req = Req.get_autocompletion(filepath=util.relative_view_file_name(view),prefix="m")
-            req['seq'] = ANY
-            backend.send_request.assert_called_with(req)
+            request = req.get_autocompletion(filepath=util.relative_view_file_name(view),prefix="m")
+            request['seq'] = ANY
+            backend.send_request.assert_called_with(request)
 
     def test_returns_completions(self):
         listener = StackIDEAutocompleteHandler()

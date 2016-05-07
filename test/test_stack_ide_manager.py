@@ -9,7 +9,7 @@ from .stubs import sublime
 from .fakebackend import patched_stack_ide_manager
 from .data import test_settings
 from log import Log
-from req import Req
+import req
 import watchdog as wd
 
 
@@ -94,7 +94,7 @@ class StackIDEManagerTests(unittest.TestCase):
         StackIDEManager.check_windows()
         self.assertEqual(0, len(StackIDEManager.ide_backend_instances))
         self.assertFalse(instance.is_alive)
-        instance._backend.send_request.assert_called_with(Req.get_shutdown())
+        instance._backend.send_request.assert_called_with(req.get_shutdown())
 
 
     def test_retains_existing_instances(self):
@@ -120,7 +120,7 @@ class StackIDEManagerTests(unittest.TestCase):
         # instances should be shut down.
         self.assertEqual(1, len(StackIDEManager.ide_backend_instances))
         self.assertFalse(instance.is_alive)
-        instance._backend.send_request.assert_called_with(Req.get_shutdown())
+        instance._backend.send_request.assert_called_with(req.get_shutdown())
 
         sublime.destroy_windows()
 

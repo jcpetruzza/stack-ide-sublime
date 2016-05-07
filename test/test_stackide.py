@@ -1,11 +1,11 @@
 import unittest
 from unittest.mock import Mock, MagicMock
 import stack_ide as stackide
+import req
 from .stubs import sublime
 from .fakebackend import FakeBackend
 from settings import Settings
 from .data import status_progress_1
-from req import Req
 
 _test_settings = Settings("none", [], False)
 
@@ -34,9 +34,9 @@ class StackIDETests(unittest.TestCase):
         self.assertIsNotNone(instance)
         self.assertTrue(instance.is_active)
         self.assertTrue(instance.is_alive)
-        req = Req.get_source_errors()
-        instance.send_request(req)
-        backend.send_request.assert_called_with(req)
+        request = req.get_source_errors()
+        instance.send_request(request)
+        backend.send_request.assert_called_with(request)
 
     def test_handle_welcome_stack_ide_outdated(self):
 
@@ -68,5 +68,5 @@ class StackIDETests(unittest.TestCase):
         self.assertFalse(instance.is_active)
         self.assertFalse(instance.is_alive)
         backend.send_request.assert_called_with(
-            Req.get_shutdown())
+            req.get_shutdown())
 

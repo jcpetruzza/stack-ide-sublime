@@ -12,9 +12,9 @@ import uuid
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 
 from utility import first_folder, complain
-from req import Req
 from log import Log
 from win import Win
+import req
 import response as res
 
 # Make sure Popen hides the console on Windows.
@@ -87,15 +87,15 @@ class StackIDE:
 
     def update_files(self, filenames):
         new_include_targets = self.update_new_include_targets(filenames)
-        self.send_request(Req.update_session_includes(new_include_targets))
-        self.send_request(Req.get_source_errors(), Win(self.window).handle_source_errors)
+        self.send_request(req.update_session_includes(new_include_targets))
+        self.send_request(req.get_source_errors(), Win(self.window).handle_source_errors)
 
     def end(self):
         """
         Ask stack-ide to shut down.
         """
         Win(self.window).hide_error_panel()
-        self.send_request(Req.get_shutdown())
+        self.send_request(req.get_shutdown())
         self.die()
 
     def die(self):

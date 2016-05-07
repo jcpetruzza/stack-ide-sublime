@@ -6,8 +6,8 @@ except ImportError:
 import sys, os
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 
+import req
 from utility import is_haskell_view, relative_view_file_name, span_from_view_selection
-from req import Req
 from win import Win
 from stack_ide_manager import StackIDEManager, send_request
 from response import parse_autocompletions
@@ -46,7 +46,7 @@ class StackIDETypeAtCursorHandler(sublime_plugin.EventListener):
         if view.file_name():
             # Uncomment to see the scope at the cursor:
             # Log.debug(view.scope_name(view.sel()[0].begin()))
-            request = Req.get_exp_types(span_from_view_selection(view))
+            request = req.get_exp_types(span_from_view_selection(view))
             send_request(window, request, Win(window).highlight_type)
 
 
@@ -73,7 +73,7 @@ class StackIDEAutocompleteHandler(sublime_plugin.EventListener):
         # another request for completions.
         if not self.refreshing:
             self.view = view
-            request = Req.get_autocompletion(filepath=relative_view_file_name(view),prefix=prefix)
+            request = req.get_autocompletion(filepath=relative_view_file_name(view),prefix=prefix)
             send_request(window, request, self._handle_response)
 
         # Clear the flag to allow future completion queries
